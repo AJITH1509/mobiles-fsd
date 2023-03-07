@@ -5,6 +5,8 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { auth } from "./auth.js";
 import cors from "cors";
+import nodemailer from "nodemailer";
+
 dotenv.config();
 const app = express();
 
@@ -100,11 +102,33 @@ async function addUser(data) {
   return await client.db("b42wd2").collection("users").insertOne(data);
 }
 
+app.post("/login/forgetpassword", async function (request, response) {
+  const { username } = request.body;
+  const userFromDb = await getUserByName(username);
+  if (!userFromDb) {
+    response.status(401).send({ message: "invalid credentials" });
+  } else {
+    const randomNumber = Math.floor(100000 + Math.random() * 900000);
+    const setOtp = updateOtp(username, randomNumber);
+  }
+  response.send({ message: "OTP sent successfully" });
+});
+
 async function getUserByName(username) {
   return await client
     .db("b42wd2")
     .collection("users")
     .findOne({ username: username });
+}
+
+async function updateOtp(username, randomNumber) {
+  const updated = {
+    OTP: randomNumber,
+  };
+  return await client
+    .db("b42wd2")
+    .collection("users")
+    .updateOne({ username: username }, { $set: updated });
 }
 
 app.listen(PORT, () => console.log(`The server started in: ${PORT} ✨✨`));
