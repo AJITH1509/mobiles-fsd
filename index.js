@@ -3,6 +3,7 @@ import { MongoClient } from "mongodb";
 import * as dotenv from "dotenv";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { auth } from "./auth.js";
 import cors from "cors";
 dotenv.config();
 const app = express();
@@ -15,10 +16,10 @@ const client = new MongoClient(MONGO_URL); // dial
 await client.connect(); // call
 console.log("Mongo is connected !!!  ");
 
-app.use(express.json());
+app.use(express.json()); // intercepts every requests if need it converts data ito json
 app.use(cors());
 
-app.get("/mobiles", async function (request, response) {
+app.get("/mobiles", auth, async function (request, response) {
   const result = await client
     .db("b42wd2")
     .collection("mobiles")
