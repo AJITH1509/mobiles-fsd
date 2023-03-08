@@ -49,11 +49,11 @@ async function generateHashedPassword(password) {
 
 app.post("/signup", express.json(), async function (request, response) {
   try {
-    const { username, password } = request.body;
-    const userFromDb = await getUserByName(username);
-    // check username exists
+    const { name, email, password } = request.body;
+    const userFromDb = await getUserByName(email);
+    // check email exists
     if (userFromDb) {
-      response.status(401).send({ message: "username already exists" });
+      response.status(401).send({ message: "email already exists" });
     }
     //set password length for security purposes
     else if (password.length < 8) {
@@ -65,7 +65,8 @@ app.post("/signup", express.json(), async function (request, response) {
     else {
       const hashedPassword = await generateHashedPassword(password);
       const result = await addUser({
-        username: username,
+        name: name,
+        email: email,
         password: hashedPassword,
       });
 
@@ -78,9 +79,9 @@ app.post("/signup", express.json(), async function (request, response) {
 
 app.post("/login", async function (request, response) {
   try {
-    const { username, password } = request.body;
-    const userFromDb = await getUserByName(username);
-    // check username exists
+    const { email, password } = request.body;
+    const userFromDb = await getUserByName(email);
+    // check email exists
     if (!userFromDb) {
       response.status(401).send({ message: "invalid credentials" });
     } else {
@@ -98,37 +99,119 @@ app.post("/login", async function (request, response) {
   }
 });
 
-async function addUser(data) {
-  return await client.db("b42wd2").collection("users").insertOne(data);
-}
-
 app.post("/login/forgetpassword", async function (request, response) {
-  const { username } = request.body;
-  const userFromDb = await getUserByName(username);
+  const { email } = request.body;
+  const userFromDb = await getUserByName(email);
   if (!userFromDb) {
     response.status(401).send({ message: "invalid credentials" });
   } else {
     const randomNumber = Math.floor(100000 + Math.random() * 900000);
-    const setOtp = updateOtp(username, randomNumber);
+    const setOtp = updateOtp(email, randomNumber);
+    const sender = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.Email,
+        pass: process.env.Password,
+      },
+    });
+    const composeMail = {
+      from: process.env.Email,
+      to: email,
+      subject: "OTP for Reset Password",
+      text: `${randomNumber}`,
+    };
+    sender.sendMail(composeMail, (error, info) => {
+      if (error) {
+        console.log(error);
+      } else {
+        console.log(`Email ${info.response}`);
+      }
+    });
   }
-  response.send({ message: "OTP sent successfully" });
+  response.status(200).send({ message: "OTP sent successfully" });
 });
 
-async function getUserByName(username) {
+app.post("/verifyotp", async function (request, response) {
+  const { OTP } = request.body;
+  const otp = parseInt(OTP);
+  const otpFromDB = await getOtp(otp);
+  if (otpFromDB === null) {
+    response.status(401).send({ message: "Invalid OTP" });
+  } else if (otpFromDB.OTP === otp) {
+    const deleteOtpDB = await deleteOtp(otp);
+    response.status(200).send({ message: "OTP verified successfully" });
+  }
+});
+
+app.post("/setpassword", express.json(), async function (request, response) {
+  try {
+    const { email, password } = request.body;
+    const userFromDb = await getUserByName(email);
+    // check email exists
+    if (!userFromDb) {
+      response.status(401).send({ message: "Invalid Credentials" });
+    }
+    //set password length for security purposes
+    else if (password.length < 8) {
+      response
+        .status(400)
+        .send({ message: "Password must be at least 8 characters" });
+    }
+    //all condition passed allowed add user with hash value
+    else {
+      const hashedPassword = await generateHashedPassword(password);
+      const result = await updatePassword(email, hashedPassword);
+
+      response.send({ message: "password changed successfully" });
+    }
+  } catch (err) {
+    console.log(err);
+  }
+});
+
+async function updatePassword(email, hashedPassword) {
+  const updated = {
+    password: hashedPassword,
+  };
   return await client
     .db("b42wd2")
     .collection("users")
-    .findOne({ username: username });
+    .updateOne({ email: email }, { $set: updated });
 }
 
-async function updateOtp(username, randomNumber) {
+async function getUserByName(email) {
+  return await client
+    .db("b42wd2")
+    .collection("users")
+    .findOne({ email: email });
+}
+
+async function getOtp(OTP) {
+  return await client.db("b42wd2").collection("users").findOne({ OTP: OTP });
+}
+
+async function addUser(data) {
+  return await client.db("b42wd2").collection("users").insertOne(data);
+}
+
+async function updateOtp(email, randomNumber) {
   const updated = {
     OTP: randomNumber,
   };
   return await client
     .db("b42wd2")
     .collection("users")
-    .updateOne({ username: username }, { $set: updated });
+    .updateOne({ email: email }, { $set: updated });
+}
+
+async function deleteOtp(otp) {
+  const data = {
+    OTP: otp,
+  };
+  return await client
+    .db("b42wd2")
+    .collection("users")
+    .updateOne({ OTP: otp }, { $unset: data });
 }
 
 app.listen(PORT, () => console.log(`The server started in: ${PORT} ✨✨`));
