@@ -3,7 +3,7 @@ import { auth } from "../auth.js";
 import { getAllMobiles, addMobile } from "../service/mobile.service.js";
 const router = express.Router();
 
-router.get("/mobiles", auth, async function (request, response) {
+router.get("/mobiles", async function (request, response) {
   const result = await getAllMobiles();
   response.send(result);
 });
